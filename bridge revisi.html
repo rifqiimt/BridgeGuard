@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Grafik Getaran Realtime</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 30px;
+      text-align: center;
+    }
+    h2 {
+      margin-bottom: 30px;
+    }
+    canvas {
+      max-width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <h2>Grafik Getaran Realtime</h2>
+  <canvas id="vibrationChart" height="100"></canvas>
+
+  <script>
+    // Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyBMBtPkoaI7s_fiollPhLbgexUsPA3STRw",
+      authDomain: "bridgeguard-iot2.firebaseapp.com",
+      databaseURL: "https://bridgeguard-iot2-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "bridgeguard-iot2",
+      storageBucket: "bridgeguard-iot2.appspot.com",
+      messagingSenderId: "846189912820",
+      appId: "1:846189912820:web:c947983918b4ef0dcab207"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const historyRef = db.ref("/adxl_historyy");
+
+    // Inisialisasi Chart.js
+    const ctx = document.getElementById("vibrationChart").getContext("2d");
+    const labels = [];
+    const dataX = [], dataY = [], dataZ = [];
+
+    const chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: labels,
+        datasets: [
+          { label: "X (m/s²)", borderColor: "red", data: dataX, fill: false },
+          { label: "Y (m/s²)", borderColor: "green", data: dataY, fill: false },
+          { label: "Z (m/s²)", borderColor: "blue", data: dataZ, fill: false }
+        ]
+      },
+      options: {
+        responsive: true,
+        animation: false,
+        scales: {
+          x: { title: { display: true, text: "Waktu" } },
+          y: { title: { display: true, text: "Percepatan (m/s²)" }, suggestedMin: -15, suggestedMax: 15 }
+        }
+      }
+    });
+
+    const threshold = 1.0;
+
+    // Tambah data ke grafik hanya jika ada getaran
+    historyRef.on("child_added", (snapshot) => {
+      const data = snapshot.val();
+      const x = parseFloat(data.x);
+      const y = parseFloat(data.y);
+      const z = parseFloat(data.z);
+      const label = data.timestamp ?? snapshot.key.replace(/_/g, " ").replace(/-/g, ":");
+
+      const isVibrating = Math.abs(x) > threshold || Math.abs(y) > threshold || Math.abs(z - 9.81) > 1;
+
+      if (isVibrating) {
+        if (labels.length >= 30) {
+          labels.shift(); dataX.shift(); dataY.shift(); dataZ.shift();
+        }
+
+        labels.push(label);
+        dataX.push(x.toFixed(2));
+        dataY.push(y.toFixed(2));
+        dataZ.push(z.toFixed(2));
+
+        chart.update();
+      }
+    });
+
+        // Saat ada data baru ditambahkan
+    historyRef.on('child_added', (snapshot) => {
+      insertOrUpdateRow(snapshot.key, snapshot.val());
+    });
+
+    // Saat ada data yang diperbarui
+    historyRef.on('child_changed', (snapshot) => {
+      insertOrUpdateRow(snapshot.key, snapshot.val());
+    });
+  </script>
+</body>
+</html>

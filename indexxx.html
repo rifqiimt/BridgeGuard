@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Sistem Monitoring Getaran</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* Mengembalikan CSS untuk navigasi dan section */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: linear-gradient(to bottom, #0f2027, #203a43, #2c5364); color: #fff; min-height: 100vh; }
+    header { background: linear-gradient(to right, #0f2027, #203a43, #2c5364); color: #fff; text-align: center; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); border-bottom-left-radius: 20px; border-bottom-right-radius: 20px; }
+    header h1 { font-size: 32px; font-weight: 700; display: flex; justify-content: center; align-items: center; gap: 1px; }
+    #status-wrapper { text-align: center; margin: 25px 0; }
+    #status-indicator { display: inline-block; padding: 12px 24px; background-color: #2ecc71; color: #fff; border-radius: 30px; font-weight: 600; font-size: 16px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2); transition: all 0.3s ease; }
+    
+    /* Navigasi Menu */
+    nav { display: flex; justify-content: center; margin-bottom: 30px; }
+    nav ul { list-style: none; display: flex; gap: 20px; background: rgba(255, 255, 255, 0.05); padding: 15px 25px; border-radius: 20px; backdrop-filter: blur(10px); }
+    nav ul li { cursor: pointer; padding: 10px 20px; border-radius: 12px; transition: background-color 0.4s, transform 0.2s; font-weight: 500; }
+    nav ul li:hover, nav ul li.active { background-color: #2980b9; color: #fff; transform: scale(1.05); }
+
+    .container { padding: 0 20px 40px 20px; max-width: 1100px; margin: auto; }
+    
+    /* Sections untuk menampilkan/menyembunyikan konten */
+    .section { display: none; animation: fadeIn 0.6s ease-in-out; }
+    .section.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    h2 { text-align: center; margin-bottom: 30px; font-size: 28px; }
+    table { width: 100%; border-collapse: collapse; background: #1c2b36; color: #ecf0f1; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.2); margin-top: 20px; }
+    th, td { border: 1px solid #34495e; padding: 14px; text-align: center; }
+    th { background-color: #2c3e50; }
+    tr:nth-child(even) { background-color: #223344; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>
+    <img src="ridwan.png" alt="Logo" style="height: 120px; vertical-align: middle;">
+    Sistem Monitoring Getaran
+  </h1>
+</header>
+
+<div id="status-wrapper">
+  <div id="status-indicator">Memuat status...</div>
+</div>
+
+<div class="container">
+  <nav>
+    <ul id="nav-menu">
+      <li id="nav-live-history" class="active" onclick="showSection('live_history', this)">📈 Live History</li>
+      <li id="nav-vibration-log" onclick="showSection('vibration_log', this)">🔔 Log Getaran</li>
+    </ul>
+  </nav>
+
+  <div id="live_history" class="section active">
+    <h2>📊 Tabel Histori Perubahan Getaran (Live)</h2>
+    <table id="historyTable">
+      <thead>
+        <tr>
+          <th>Waktu</th>
+          <th>ΔX (m/s²)</th>
+          <th>ΔY (m/s²)</th>
+          <th>ΔZ (m/s²)</th>
+          <th>Status Getaran</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  
+  <div id="vibration_log" class="section">
+    <h2>🔔 Catatan Riwayat Saat Getaran Terdeteksi</h2>
+    <table id="vibrationLogTable">
+        <thead>
+            <tr>
+                <th>Waktu</th>
+                <th>ΔX (m/s²)</th>
+                <th>ΔY (m/s²)</th>
+                <th>ΔZ (m/s²)</th>
+                <th>Status Getaran</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyBMBtPkoaI7s_fiollPhLbgexUsPA3STRw",
+    databaseURL: "https://bridgeguard-iot2-default-rtdb.asia-southeast1.firebasedatabase.app/"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  
+  // Referensi untuk tabel live history (20 data terakhir)
+  const historyRef = db.ref("adxl_historyy").limitToLast(20);
+  const historyTableBody = document.querySelector('#historyTable tbody');
+  
+  // Referensi untuk tabel log getaran (50 data terakhir yang terdeteksi)
+  const vibrationLogRef = db.ref("adxl_historyy").orderByChild("vibration").equalTo(1).limitToLast(50);
+  const vibrationLogTableBody = document.querySelector('#vibrationLogTable tbody');
+
+  const statusIndicator = document.getElementById("status-indicator");
+  
+  // Fungsi untuk update tabel Live History (tidak berubah)
+  function updateLiveHistoryRow(key, data) {
+    const waktu = data.timestamp || key.replace(/_/g, ' ').replace(/-/g, ':');
+    const dx = data.dx?.toFixed(2) ?? '-';
+    const dy = data.dy?.toFixed(2) ?? '-';
+    const dz = data.dz?.toFixed(2) ?? '-';
+    const status = data.vibration == 1 ? 'Getaran Terdeteksi' : 'Normal';
+
+    if (data.vibration == 1) {
+      statusIndicator.textContent = '⚠️ Getaran Terdeteksi';
+      statusIndicator.style.backgroundColor = '#e74c3c';
+    } else {
+      statusIndicator.textContent = '✅ Normal';
+      statusIndicator.style.backgroundColor = '#2ecc71';
+    }
+
+    const newRowHTML = `<td>${waktu}</td><td>${dx}</td><td>${dy}</td><td>${dz}</td><td>${status}</td>`;
+    
+    let row = historyTableBody.querySelector(`[data-key="${key}"]`);
+    if (!row) {
+        row = historyTableBody.insertRow(0);
+        row.setAttribute('data-key', key);
+    }
+    row.innerHTML = newRowHTML;
+  }
+
+  // =========================================================================
+  // MODIFIKASI: Fungsi untuk tabel log getaran sekarang bisa menambah & mengubah
+  // =========================================================================
+  function updateVibrationLogRow(key, data) {
+    const waktu = data.timestamp || key.replace(/_/g, ' ').replace(/-/g, ':');
+    const dx = data.dx?.toFixed(2) ?? '-';
+    const dy = data.dy?.toFixed(2) ?? '-';
+    const dz = data.dz?.toFixed(2) ?? '-';
+    
+    const newRowHTML = `<td>${waktu}</td><td>${dx}</td><td>${dy}</td><td>${dz}</td><td style="color: #e74c3c; font-weight: bold;">Terdeteksi</td>`;
+    
+    // Cek jika baris sudah ada atau belum
+    let row = vibrationLogTableBody.querySelector(`[data-key="${key}"]`);
+    if (!row) {
+        // Jika belum ada, buat baris baru di paling atas
+        row = vibrationLogTableBody.insertRow(0); 
+        row.setAttribute('data-key', key);
+    }
+    // Isi atau perbarui konten baris
+    row.innerHTML = newRowHTML;
+  }
+  // =========================================================================
+
+  // Listener untuk data Live History (tidak berubah)
+  historyRef.on('child_added', snapshot => updateLiveHistoryRow(snapshot.key, snapshot.val()));
+  historyRef.on('child_changed', snapshot => updateLiveHistoryRow(snapshot.key, snapshot.val()));
+
+
+  // =========================================================================
+  // MODIFIKASI: Listener untuk Log Getaran sekarang lebih lengkap
+  // =========================================================================
+  // 1. Saat data getaran BARU ditambahkan ke log
+  vibrationLogRef.on('child_added', snapshot => updateVibrationLogRow(snapshot.key, snapshot.val()));
+
+  // 2. Saat data getaran yang ADA DI LOG berubah
+  vibrationLogRef.on('child_changed', snapshot => updateVibrationLogRow(snapshot.key, snapshot.val()));
+  
+  // 3. (PENTING) Saat data getaran DIHAPUS dari log (baik manual atau karena keluar dari limit 50)
+  vibrationLogRef.on('child_removed', snapshot => {
+    const keyToRemove = snapshot.key;
+    const rowToRemove = vibrationLogTableBody.querySelector(`[data-key="${keyToRemove}"]`);
+    if (rowToRemove) {
+      rowToRemove.remove(); // Hapus baris dari tabel HTML
+    }
+  });
+  // =========================================================================
+
+  // Fungsi untuk navigasi antar section (tidak berubah)
+  function showSection(id, element) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    document.querySelectorAll('#nav-menu li').forEach(li => li.classList.remove('active'));
+    element.classList.add('active');
+  }
+</script>
+</body>
+</html>

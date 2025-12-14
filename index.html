@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Monitoring Getaran Jembatan</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; background-color: #f9f9f9; }
+    h1 { text-align: center; }
+    #status { color: green; font-weight: bold; margin-bottom: 20px; }
+    canvas { max-width: 700px; margin: auto; display: block; }
+    .notif { color: red; font-weight: bold; margin-top: 20px; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>📡 Monitoring Getaran Jembatan</h1>
+  <div id="status">Memuat data...</div>
+  <canvas id="chartGetaran" width="600" height="300"></canvas>
+  <div id="notif" class="notif"></div>
+
+  <script>
+    // Konfigurasi Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyBMBtPkoaI7s_fiollPhLbgexUsPA3STRw",
+      databaseURL: "https://bridgeguard-iot2-default-rtdb.asia-southeast1.firebasedatabase.app/"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const getaranRef = db.ref("getaran");
+
+    // Setup Chart
+    const ctx = document.getElementById("chartGetaran").getContext("2d");
+    const chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [
+          { label: "X", data: [], borderColor: "red", fill: false },
+          { label: "Y", data: [], borderColor: "blue", fill: false },
+          { label: "Z", data: [], borderColor: "green", fill: false }
+        ]
+      },
+      options: {
+        scales: {
+          x: { title: { display: true, text: "Waktu" } },
+          y: { title: { display: true, text: "Getaran" }, suggestedMin: 0, suggestedMax: 2 }
+        }
+      }
+    });
+
+    // Fungsi Tambahkan Data ke Grafik
+    function updateChart(x, y, z) {
+      const time = new Date().toLocaleTimeString();
+      if (chart.data.labels.length > 20) {
+        chart.data.labels.shift();
+        chart.data.datasets.forEach(ds => ds.data.shift());
+      }
+      chart.data.labels.push(time);
+      chart.data.datasets[0].data.push(x);
+      chart.data.datasets[1].data.push(y);
+      chart.data.datasets[2].data.push(z);
+      chart.update();
+    }
+
+    // Ambang Batas Notifikasi
+    const ambang = 1.5;
+
+    // Ambil data realtime dari Firebase
+    getaranRef.on("value", (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const { x, y, z } = data;
+        document.getElementById("status").innerText = `X: ${x.toFixed(2)} | Y: ${y.toFixed(2)} | Z: ${z.toFixed(2)}`;
+        updateChart(x, y, z);
+
+        // Tampilkan notifikasi jika melebihi ambang batas
+        const notif = document.getElementById("notif");
+        if (x > ambang || y > ambang || z > ambang) {
+          notif.innerText = "⚠️ Getaran Melebihi Batas!";
+        } else {
+          notif.innerText = "";
+        }
+      } else {
+        document.getElementById("status").innerText = "Data kosong!";
+      }
+    });
+  </script>
+</body>
+</html>

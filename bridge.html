@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Histori Getaran Realtime</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f4f4f4; }
+    h2 { color: #333; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
+    th, td { border: 1px solid #ccc; padding: 10px; text-align: center; }
+    th { background-color: #eaeaea; }
+    tr:nth-child(even) { background-color: #f9f9f9; }
+  </style>
+</head>
+<body>
+
+  <h2>📊 Tabel Histori Getaran (Live Update)</h2>
+  <table id="historyTable">
+    <thead>
+      <tr>
+        <th>Waktu</th>
+        <th>X (m/s²)</th>
+        <th>Y (m/s²)</th>
+        <th>Z (m/s²)</th>
+        <th>Status Getaran</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Data akan dimuat di sini -->
+    </tbody>
+  </table>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBMBtPkoaI7s_fiollPhLbgexUsPA3STRw",
+      databaseURL: "https://bridgeguard-iot2-default-rtdb.asia-southeast1.firebasedatabase.app/"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const tableBody = document.querySelector('#historyTable tbody');
+
+    // Simpan ID baris untuk update jika terjadi perubahan
+    const rowMap = {};
+
+    const historyRef = db.ref("adxl_historyy").orderByKey().limitToLast(100);
+
+    function insertOrUpdateRow(key, data) {
+      let row = rowMap[key];
+
+      const waktu = data.timestamp || key.replace(/_/g, ' ').replace(/-/g, ':');
+      const x = data.x?.toFixed(2) ?? '-';
+      const y = data.y?.toFixed(2) ?? '-';
+      const z = data.z?.toFixed(2) ?? '-';
+      const status = data.vibration == 1 ? 'Terdeteksi' : 'Tidak';
+
+      if (row) {
+        // Update baris jika sudah ada
+        row.innerHTML = `<td>${waktu}</td><td>${x}</td><td>${y}</td><td>${z}</td><td>${status}</td>`;
+      } else {
+        // Tambah baris baru di atas
+        row = tableBody.insertRow(0);
+        row.innerHTML = `<td>${waktu}</td><td>${x}</td><td>${y}</td><td>${z}</td><td>${status}</td>`;
+        rowMap[key] = row;
+      }
+    }
+
+    // Saat ada data baru ditambahkan
+    historyRef.on('child_added', (snapshot) => {
+      insertOrUpdateRow(snapshot.key, snapshot.val());
+    });
+
+    // Saat ada data yang diperbarui
+    historyRef.on('child_changed', (snapshot) => {
+      insertOrUpdateRow(snapshot.key, snapshot.val());
+    });
+  </script>
+</body>
+</html>
